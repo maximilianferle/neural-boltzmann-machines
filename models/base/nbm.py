@@ -2,6 +2,7 @@ import math
 
 import torch
 from torch import nn
+from torch.nn.functional import mse_loss, cosine_similarity
 
 
 def logcosh(x):
@@ -266,32 +267,7 @@ class NBM(nn.Module):
 
         return sample
 
-    def compute_loss(self, y, x, mc_steps):
-        """
-        Evaluate the losses used for training the model
-
-        Args:
-            y (torch.tensor ~ (batch_size, ny))
-            x (torch.tensor ~ (batch_size, nx))
-            mc_steps (int): number of Gibbs sampling steps
-
-        Returns:
-            loss: the usual CD loss
-            MSE_bias_loss: the bias_net reconstruction loss
-            MSE_variance_loss: the precision_net variance reconstruction loss
-        """
-        nsteps = max(1, mc_steps)
-
-        bias = self.bias_net(x)
-        precision = self.precision_net(x)
-        weights = self.weights_net(x)
-
-        y_model = bias.clone()
-        for _ in range(nsteps):
-            h_model = self._sample_hid(y_model, bias, precision, weights)
-            y_model = self._sample_vis(h_model, bias, precision, weights)
-
-        # This is the loss used for backprop
+    def _compute_loss(self, y, y_model, bias, precision, weights):
         y_flat = torch.flatten(y, start_dim=1)
         pos_phase = self._free_energy(y_flat, bias, precision, weights)
         neg_phase = self._free_energy(y_model, bias, precision, weights)
@@ -308,14 +284,35 @@ class NBM(nn.Module):
         diff = y_variance - variance
         variance_mse = (diff * diff).mean()
 
+        pred_mse = mse_loss(y_flat, y_model)
+        cos_sim = cosine_similarity(y_flat, y_model).mean()
+
         return {
             "CD_loss": CD_loss,
             "MSE_bias_loss": bias_mse,
             "MSE_variance_loss": variance_mse,
+            "MSE_pred": pred_mse,
+            "cosine_similarity": cos_sim,
         }
 
-    @torch.no_grad()
-    def sample(self, x, mc_steps, denoise=False):
+    def compute_loss(self, y, x, mc_steps):
+        """
+        Evaluate the losses used for training the model
+
+        Args:
+            y (torch.tensor ~ (batch_size, ny))
+            x (torch.tensor ~ (batch_size, nx))
+            mc_steps (int): number of Gibbs sampling steps
+
+        Returns:
+            loss: the usual CD loss
+            MSE_bias_loss: the bias_net reconstruction loss
+            MSE_variance_loss: the precision_net variance reconstruction loss
+        """
+        y_model, bias, precision, weights = self._sample(x=x, mc_steps=mc_steps)
+        return self._compute_loss(y=y, y_model=y_model, bias=bias, precision=precision, weights=weights)
+
+    def _sample(self, x, mc_steps, denoise=False):
         """
         Generate (noisy) samples from the model.
 
@@ -341,4 +338,9 @@ class NBM(nn.Module):
         if denoise:
             y_model = self._sample_vis(h_model, bias, precision, weights, denoise=True)
 
+        return y_model, bias, precision, weights
+
+    @torch.no_grad()
+    def sample(self, x, mc_steps, denoise=False):
+        y_model, *_ = self._sample(x=x, mc_steps=mc_steps, denoise=denoise)
         return y_model
