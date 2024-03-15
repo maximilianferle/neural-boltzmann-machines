@@ -1,4 +1,4 @@
-# Implementation of Long Short-Term Conditional Restricted Boltzmann Machine (LSTMCRBM).
+# Implementation of Long Short-Term Memory Conditional Restricted Boltzmann Machine (LSTMCRBM).
 
 Uses LSTMs to encode medical time series data and Neural Boltzmann Machines (NBMs) implementation from this [paper](https://arxiv.org/abs/2305.08337)
 to generate synthetic output conditioned on it.
