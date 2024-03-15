@@ -1,0 +1,9 @@
+bias_weight_decay: 0.1
+crbm_hidden: 16
+learning_rate: 0.001
+lstm_units: 32
+lstm_weight_decay: 0.1
+mc_steps: 128
+n_features: 10
+precision_weight_decay: 0.1
+weights_weight_decay: 0.2
